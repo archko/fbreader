@@ -23,15 +23,20 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.*;
 
+import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.SearchManager;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.*;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
 import android.view.*;
 import android.widget.RelativeLayout;
+import android.widget.Toast;
 
 import org.geometerplus.zlibrary.core.application.ZLApplicationWindow;
 import org.geometerplus.zlibrary.core.filesystem.ZLFile;
@@ -265,7 +270,7 @@ public final class FBReader extends FBReaderMainActivity implements ZLApplicatio
 		myFBReaderApp.addAction(ActionCode.SHOW_BOOK_INFO, new ShowBookInfoAction(this, myFBReaderApp));
 		myFBReaderApp.addAction(ActionCode.SHOW_TOC, new ShowTOCAction(this, myFBReaderApp));
 		myFBReaderApp.addAction(ActionCode.SHOW_BOOKMARKS, new ShowBookmarksAction(this, myFBReaderApp));
-		myFBReaderApp.addAction(ActionCode.SHOW_NETWORK_LIBRARY, new ShowNetworkLibraryAction(this, myFBReaderApp));
+		//myFBReaderApp.addAction(ActionCode.SHOW_NETWORK_LIBRARY, new ShowNetworkLibraryAction(this, myFBReaderApp));
 
 		myFBReaderApp.addAction(ActionCode.SHOW_MENU, new ShowMenuAction(this, myFBReaderApp));
 		myFBReaderApp.addAction(ActionCode.SHOW_NAVIGATION, new ShowNavigationAction(this, myFBReaderApp));
@@ -319,6 +324,8 @@ public final class FBReader extends FBReaderMainActivity implements ZLApplicatio
 				});
 			}
 		}
+
+		checkSdcardPermission();
 	}
 
 	@Override
@@ -414,6 +421,31 @@ public final class FBReader extends FBReaderMainActivity implements ZLApplicatio
 			});
 		} else {
 			super.onNewIntent(intent);
+		}
+	}
+
+
+	private boolean processIntent(Intent intent) {
+		if (intent == null)
+			return false;
+		String fileToOpen = null;
+		if (Intent.ACTION_VIEW.equals(intent.getAction())) {
+			Uri uri = intent.getData();
+			intent.setData(null);
+			if (uri != null) {
+				fileToOpen = uri.getPath();
+			}
+		}
+
+		if (fileToOpen != null) {
+			// patch for opening of books from ReLaunch (under Nook Simple Touch)
+			while (fileToOpen.indexOf("%2F") >= 0) {
+				fileToOpen = fileToOpen.replace("%2F", "/");
+			}
+
+			return true;
+		} else {
+			return false;
 		}
 	}
 
@@ -1049,5 +1081,59 @@ public final class FBReader extends FBReaderMainActivity implements ZLApplicatio
 		myFBReaderApp.getTextView().removeHighlightings(DictionaryHighlighting.class);
 		myFBReaderApp.getViewWidget().reset();
 		myFBReaderApp.getViewWidget().repaint();
+	}
+
+	//=========================================================
+
+
+	private static final int REQUEST_PERMISSION_CODE = 0x001;
+
+	void checkSdcardPermission() {
+		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+			// WRITE_EXTERNAL_STORAGE permission has not been granted.
+
+			requestSdcardPermission();
+		} else {
+			loadView();
+		}
+	}
+
+	/**
+	 * Requests the sdcard permission.
+	 * If the permission has been denied previously, a SnackBar will prompt the user to grant the
+	 * permission, otherwise it is requested directly.
+	 */
+	private void requestSdcardPermission() {
+		if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+				Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+			// Provide an additional rationale to the user if the permission was not granted
+			// and the user would benefit from additional context for the use of the permission.
+			// For example if the user has previously denied the permission.
+			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+					REQUEST_PERMISSION_CODE);
+		} else {
+
+			// sdcard permission has not been granted yet. Request it directly.
+			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+					REQUEST_PERMISSION_CODE);
+		}
+	}
+
+	@Override
+	public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+		if (requestCode == REQUEST_PERMISSION_CODE) {
+			if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+				//  权限通过
+				loadView();
+			} else {
+				// 权限拒绝
+				Toast.makeText(this, "没有获取sdcard的读取权限", Toast.LENGTH_LONG).show();
+			}
+		}
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+	}
+
+	private void loadView() {
+
 	}
 }
